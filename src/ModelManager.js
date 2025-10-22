@@ -3,13 +3,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 class ModelManager {
-  constructor() {
+  constructor(modelDir = null) {
     this.models = new Map();
     this.currentModel = null;
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    this.modelDir = path.join(__dirname, '../models');
-    this.configFile = path.join(__dirname, '../custom-models.json');
+    this.modelDir = modelDir || path.join(process.cwd(), 'models');
+    this.configFile = path.join(process.cwd(), 'custom-models.json');
+    
+    // 默认模型名称列表（现在从models目录动态加载）
+    this.defaultModelNames = [];
     
     // 加载已保存的自定义模型
     this.loadCustomModels();
@@ -179,6 +180,24 @@ class ModelManager {
   }
 
   /**
+   * 确保模型目录存在
+   */
+  async ensureModelDirExists() {
+    try {
+      await fs.access(this.modelDir);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        try {
+          await fs.mkdir(this.modelDir, { recursive: true });
+          console.log(`✅ 已创建模型目录: ${this.modelDir}`);
+        } catch (mkdirError) {
+          console.warn(`⚠️  创建模型目录失败: ${mkdirError.message}`);
+        }
+      }
+    }
+  }
+
+  /**
    * 获取指定模型
    * @param {string} name - 模型名称
    */
@@ -231,168 +250,50 @@ class ModelManager {
   }
 
   /**
-   * 加载默认模型集
+   * 加载默认模型集（从models目录读取）
    */
   async loadDefaultModels() {
-    // 内置模型定义
-    const defaultModels = {
-      'viral-scoring': {
-        description: '病毒传播内容评估模型',
-        author: '传播学专家',
-        version: '1.0',
-        dimensions: [
-          {
-            name: '情绪共鸣度',
-            key: 'emotional_resonance',
-            description: '内容引发情感共鸣的能力',
-            indicators: ['引发强烈情感反应', '触动用户内心', '产生情感连接'],
-            keywords: ['感动', '震撼', '惊喜', '愤怒', '喜悦', '悲伤', '惊讶', '恐惧'],
-            weight: 1.2
-          },
-          {
-            name: '互动钩子',
-            key: 'engagement_hooks',
-            description: '促使用户互动的元素',
-            indicators: ['提问引导', '行动召唤', '话题讨论'],
-            keywords: ['你怎么看', '欢迎留言', '点赞', '转发', '评论', '参与', '互动', '讨论'],
-            weight: 1.1
-          }
-        ],
-        scoring: {
-          highScore: 80,
-          mediumScore: 60,
-          weights: 'adaptive'
-        }
-      },
-      'influence': {
-        description: '影响力六原则模型（基于罗伯特·西奥迪尼《影响力》）',
-        author: '罗伯特·西奥迪尼',
-        version: '1.0',
-        dimensions: [
-          {
-            name: '互惠原理',
-            key: 'reciprocity',
-            description: '人们倾向于回报他人的善意',
-            indicators: ['提供价值', '免费资源', '先给予后索取'],
-            keywords: ['免费', '赠送', '分享', '帮助', '回馈', '感谢', '礼物', '优惠'],
-            weight: 1.0
-          },
-          {
-            name: '承诺一致',
-            key: 'commitment_consistency',
-            description: '人们倾向于保持言行一致',
-            indicators: ['公开承诺', '逐步引导', '身份认同'],
-            keywords: ['承诺', '保证', '立场', '观点', '支持', '认同', '立场坚定', '始终如一'],
-            weight: 1.0
-          },
-          {
-            name: '社会认同',
-            key: 'social_proof',
-            description: '人们倾向于跟随大众行为',
-            indicators: ['群体行为', '名人背书', '数据支持'],
-            keywords: ['大家', '流行', '趋势', '热门', '点赞', '转发', '评论', '关注'],
-            weight: 1.2
-          },
-          {
-            name: '权威效应',
-            key: 'authority',
-            description: '人们倾向于服从权威人士',
-            indicators: ['专家身份', '专业背景', '可信来源'],
-            keywords: ['专家', '权威', '专业', '研究', '数据', '报告', '官方', '认证'],
-            weight: 1.1
-          },
-          {
-            name: '喜好原理',
-            key: 'liking',
-            description: '人们更容易被喜欢的人影响',
-            indicators: ['个人魅力', '相似性', '赞美认同'],
-            keywords: ['喜欢', '可爱', '有趣', '亲切', '友好', '温暖', '幽默', '真诚'],
-            weight: 1.0
-          },
-          {
-            name: '稀缺效应',
-            key: 'scarcity',
-            description: '稀缺性会增加物品价值',
-            indicators: ['数量有限', '时间紧迫', '独家机会'],
-            keywords: ['限量', '稀缺', '抢购', '最后机会', '即将结束', '仅剩', '独家', '限时'],
-            weight: 1.3
-          }
-        ],
-        scoring: {
-          highScore: 75,
-          mediumScore: 55,
-          weights: 'fixed'
-        }
-      },
-      'contagious': {
-        description: '疯传六原则模型（基于乔纳·伯杰《疯传》）',
-        author: '乔纳·伯杰',
-        version: '1.0',
-        dimensions: [
-          {
-            name: '社交货币',
-            key: 'social_currency',
-            description: '分享内容能提升个人形象',
-            indicators: ['展示品味', '显示聪明', '表现独特'],
-            keywords: ['内幕', '秘诀', '独家', '稀缺', '高端', '专业', '前沿', '新潮'],
-            weight: 1.2
-          },
-          {
-            name: '诱因触发',
-            key: 'triggers',
-            description: '内容容易被日常事物触发',
-            indicators: ['关联日常', '环境提醒', '时机恰当'],
-            keywords: ['每天', '经常', '总是', '想到', '看到', '听到', '关联', '联系'],
-            weight: 1.0
-          },
-          {
-            name: '情绪驱动',
-            key: 'emotion',
-            description: '内容能激发强烈情绪',
-            indicators: ['情感强烈', '情绪共鸣', '情感传染'],
-            keywords: ['震惊', '愤怒', '感动', '惊喜', '恐惧', '焦虑', '兴奋', '快乐'],
-            weight: 1.3
-          },
-          {
-            name: '公开可见',
-            key: 'public',
-            description: '内容具有公开性和可见性',
-            indicators: ['易于观察', '公开分享', '社交展示'],
-            keywords: ['公开', '展示', '分享', '可见', '透明', '曝光', '传播', '扩散'],
-            weight: 1.0
-          },
-          {
-            name: '实用价值',
-            key: 'practical_value',
-            description: '内容具有实用性和帮助性',
-            indicators: ['有用信息', '解决问题', '提供价值'],
-            keywords: ['有用', '实用', '价值', '帮助', '解决', '方法', '技巧', '攻略'],
-            weight: 1.1
-          },
-          {
-            name: '故事包装',
-            key: 'stories',
-            description: '内容以故事形式呈现',
-            indicators: ['情节吸引', '人物生动', '寓意深刻'],
-            keywords: ['故事', '经历', '案例', '传说', '神话', '叙述', '讲述', '分享'],
-            weight: 1.2
-          }
-        ],
-        scoring: {
-          highScore: 80,
-          mediumScore: 60,
-          weights: 'adaptive'
+    try {
+      // 确保模型目录存在
+      await this.ensureModelDirExists();
+      
+      // 获取models目录下的所有JSON文件
+      const modelFiles = await fs.readdir(this.modelDir);
+      const jsonFiles = modelFiles.filter(file => file.endsWith('.json'));
+      
+      if (jsonFiles.length === 0) {
+        console.warn('⚠️  models目录中没有找到模型文件');
+        return;
+      }
+
+      // 清空默认模型名称列表
+      this.defaultModelNames = [];
+
+      // 加载每个模型文件
+      for (const file of jsonFiles) {
+        const filePath = path.join(this.modelDir, file);
+        const modelName = path.basename(file, '.json');
+        
+        try {
+          await this.loadModelFromFile(filePath, modelName);
+          this.defaultModelNames.push(modelName);
+          console.log(`✅ 已加载模型：${modelName}`);
+        } catch (error) {
+          console.warn(`⚠️  加载模型文件失败 ${file}: ${error.message}`);
         }
       }
-    };
 
-    // 注册所有默认模型
-    Object.entries(defaultModels).forEach(([name, model]) => {
-      this.registerModel(name, model);
-    });
-
-    // 设置默认模型
-    this.setCurrentModel('viral-scoring');
+      // 设置默认模型（优先使用viral-scoring，如果不存在则使用第一个）
+      const availableModels = this.getAvailableModels();
+      if (availableModels.length > 0) {
+        const defaultModel = availableModels.includes('viral-scoring') ? 'viral-scoring' : availableModels[0];
+        this.setCurrentModel(defaultModel);
+      }
+      
+    } catch (error) {
+      console.error('❌ 加载默认模型失败:', error.message);
+      throw error;
+    }
   }
 
   /**
@@ -421,12 +322,11 @@ class ModelManager {
    */
   async saveCustomModels() {
     try {
-      // 只保存非默认的自定义模型
+      // 只保存非默认的自定义模型（使用动态加载的默认模型列表）
       const customModels = {};
-      const defaultModelNames = ['viral-scoring', 'influence', 'contagious'];
       
       for (const [name, model] of this.models) {
-        if (!defaultModelNames.includes(name)) {
+        if (!this.defaultModelNames.includes(name)) {
           customModels[name] = model;
         }
       }
