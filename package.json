@@ -1,0 +1,27 @@
+{
+  "name": "x-viral-scorer",
+  "version": "1.0.0",
+  "description": "基于X流量密码的推文评分工具",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js -t",
+    "start": "node index.js",
+    "help": "node index.js -h",
+    "demo": "node index.js demo.md"
+  },
+  "bin": {
+    "x-scorer": "./index.js"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "dotenv": "^17.2.3",
+    "openai": "^6.3.0"
+  },
+  "keywords": ["x", "twitter", "viral", "scoring", "social-media", "content-analysis", "engagement", "content-optimization"],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

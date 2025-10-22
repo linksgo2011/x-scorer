@@ -1,4 +1,35 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
 # Logs
+*.log
+npm-debug.log*
+
+# Runtime
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Keep example files
+!example-post.md
+!test.md
+!sample-post.md# Logs
 logs
 *.log
 npm-debug.log*
