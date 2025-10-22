@@ -15,13 +15,14 @@ class ViralContentAnalyzer {
     this.reportGenerator = new ReportGenerator();
     this.openai = null;
     
-    // 初始化OpenAI客户端
+    // 初始化OpenAI客户端 - 默认启用AI分析
     if (process.env.OPENAI_API_KEY) {
       this.openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
       });
       this.contentAnalyzer = new ContentAnalyzer(this.openai);
     } else {
+      // 没有API密钥时也尝试创建空客户端，让ContentAnalyzer处理回退逻辑
       this.contentAnalyzer = new ContentAnalyzer();
     }
   }
@@ -64,11 +65,23 @@ class ViralContentAnalyzer {
       console.log(`📊 使用模型：${currentModel.name}`);
       console.log(`🎯 分析维度：${dimensions.length}个`);
       
+      // 准备模型上下文信息
+      const modelContext = {
+        name: currentModel.name,
+        description: currentModel.description,
+        author: currentModel.author,
+        version: currentModel.version
+      };
+      
       // 分析内容
       const analysis = await this.contentAnalyzer.analyzeContent(
         content,
         dimensions,
-        { useAI, aiScoring: useAI }
+        { 
+          useAI, 
+          aiScoring: useAI,
+          modelContext 
+        }
       );
 
       // 获取预测

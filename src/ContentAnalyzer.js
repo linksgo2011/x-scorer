@@ -15,7 +15,8 @@ class ContentAnalyzer {
     const {
       useAI = true,
       aiScoring = true,
-      modelName = 'gpt-3.5-turbo'
+      modelName = 'gpt-3.5-turbo',
+      modelContext = null
     } = options;
 
     const analysis = {
@@ -24,13 +25,14 @@ class ContentAnalyzer {
       scores: {},
       score: 0,
       maxScore: 0,
-      aiScoring: useAI && aiScoring
+      aiScoring: useAI && aiScoring && this.openai,
+      modelContext
     };
 
     // 并行分析所有维度
     const dimensionPromises = dimensions.map(async (dimension) => {
       try {
-        const result = await this.analyzeDimension(content, dimension, useAI && aiScoring);
+        const result = await this.analyzeDimension(content, dimension, analysis.aiScoring, analysis.modelContext);
         return { dimension, result };
       } catch (error) {
         console.warn(`分析维度 "${dimension.name}" 失败:`, error.message);
@@ -63,11 +65,19 @@ class ContentAnalyzer {
    * @param {string} content - 内容
    * @param {Object} dimension - 维度定义
    * @param {boolean} useAI - 是否使用AI评分
+   * @param {Object} modelContext - 模型上下文信息
    */
-  async analyzeDimension(content, dimension, useAI) {
+  async analyzeDimension(content, dimension, useAI, modelContext = null) {
     if (useAI && this.openai) {
-      return await this.calculateDimensionScoreWithAI(content, dimension);
+      return await this.calculateDimensionScoreWithAI(content, dimension, modelContext);
     } else {
+      // 默认情况下，如果没有OpenAI客户端，提示用户
+      if (useAI && !this.openai) {
+        console.warn(`⚠️  AI分析不可用：未配置OPENAI_API_KEY环境变量`);
+        console.warn(`💡  设置API密钥：export OPENAI_API_KEY="你的API密钥"`);
+        console.warn(`📊  使用关键词匹配作为回退方案...`);
+        console.warn(`🔍  当前分析基于关键词匹配，建议启用AI以获得更准确的语义分析`);
+      }
       return this.calculateDimensionScoreFallback(content, dimension);
     }
   }
@@ -76,16 +86,17 @@ class ContentAnalyzer {
    * 使用AI计算维度分数
    * @param {string} content - 内容
    * @param {Object} dimension - 维度定义
+   * @param {Object} modelContext - 模型上下文信息
    */
-  async calculateDimensionScoreWithAI(content, dimension) {
-    const prompt = this.buildAnalysisPrompt(content, dimension);
+  async calculateDimensionScoreWithAI(content, dimension, modelContext = null) {
+    const prompt = this.buildAnalysisPrompt(content, dimension, modelContext);
     
     const completion = await this.openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
         {
           role: 'system',
-          content: '你是一个专业的内容传播分析师。请根据提供的维度和指标，客观评估内容的质量，并给出具体的分数和改进建议。'
+          content: '你是一个专业的内容传播分析师。请根据提供的维度和指标，客观评估内容的质量，并给出具体的分数和改进建议。分析要深入、具体，避免泛泛而谈。'
         },
         {
           role: 'user',
@@ -93,7 +104,7 @@ class ContentAnalyzer {
         }
       ],
       temperature: 0.3,
-      max_tokens: 500
+      max_tokens: 800
     });
 
     const response = completion.choices[0].message.content;
@@ -101,32 +112,48 @@ class ContentAnalyzer {
   }
 
   /**
-   * 构建分析提示
+   * 构建增强分析提示
    * @param {string} content - 内容
    * @param {Object} dimension - 维度定义
+   * @param {Object} modelContext - 模型上下文信息
    */
-  buildAnalysisPrompt(content, dimension) {
-    return `请分析以下内容在"${dimension.name}"维度上的表现：
+  buildAnalysisPrompt(content, dimension, modelContext = null) {
+    const modelInfo = modelContext ? 
+      `模型：${modelContext.name}\n描述：${modelContext.description}\n` : '';
+    
+    return `你是一个专业的内容传播分析师。
 
-内容：
-${content}
+${modelInfo}分析任务：评估内容在"${dimension.name}"维度上的表现
 
-维度描述：${dimension.description}
+维度信息：
+- 名称：${dimension.name}
+- 描述：${dimension.description}
+- 权重：${dimension.weight || 1.0}
 
 评估指标：
-${dimension.indicators.map(indicator => `- ${indicator}`).join('\n')}
+${dimension.indicators.map(indicator => `• ${indicator}`).join('\n')}
 
-关键词参考：${dimension.keywords.join('、')}
+参考关键词：${dimension.keywords.join('、')}
 
-请给出：
-1. 分数（0-100分）
-2. 具体的分析理由
-3. 改进建议
+重要：请基于语义理解和内容质量进行深度分析，不要仅依赖关键词匹配。考虑内容的语境、表达效果、目标受众和实际影响力。即使内容中没有明确的关键词，也要根据语义理解来判断其在该维度上的表现。
+
+待分析内容：
+"""
+${content}
+"""
+
+评分标准（0-100分）：
+• 90-100分：卓越表现，完全符合维度要求，有创新亮点
+• 70-89分：良好表现，有明显优势，略有不足
+• 50-69分：一般表现，基本符合要求，需要改进
+• 30-49分：较弱表现，有明显缺陷，需要重点优化
+• 0-29分：很差，几乎不符合维度要求，需要重新设计
 
 请按以下格式回复：
-分数：[分数]
-分析：[分析内容]
-建议：[改进建议]`;
+评分：[具体分数]
+分析：[详细分析，包括具体例子、推理过程、优势与不足]
+优化建议：[3-5条具体可执行的建议]
+关键词匹配：[列出内容中匹配到的关键词和语义相关词]`;
   }
 
   /**
@@ -135,19 +162,24 @@ ${dimension.indicators.map(indicator => `- ${indicator}`).join('\n')}
    * @param {Object} dimension - 维度定义
    */
   parseAIResponse(response, dimension) {
-    const scoreMatch = response.match(/分数[:：]\s*(\d+)/);
-    const analysisMatch = response.match(/分析[:：]\s*([\s\S]*?)(?:建议[:：]|$)/);
-    const suggestionMatch = response.match(/建议[:：]\s*([\s\S]*?)$/);
+    const scoreMatch = response.match(/评分[:：]\s*(\d+)/);
+    const analysisMatch = response.match(/分析[:：]\s*([\s\S]*?)(?:优化建议[:：]|关键词匹配[:：]|$)/);
+    const suggestionMatch = response.match(/优化建议[:：]\s*([\s\S]*?)(?:关键词匹配[:：]|$)/);
+    const keywordsMatch = response.match(/关键词匹配[:：]\s*([\s\S]*?)$/);
 
     const score = scoreMatch ? parseInt(scoreMatch[1]) : 50;
     const analysis = analysisMatch ? analysisMatch[1].trim() : 'AI分析失败';
-    const suggestions = suggestionMatch ? suggestionMatch[1].trim().split(/[\n。]/).filter(s => s.trim()) : ['建议优化内容'];
+    const suggestions = suggestionMatch ? 
+      suggestionMatch[1].trim().split(/[\n。]/).filter(s => s.trim().length > 0) : 
+      ['建议优化内容'];
 
     return {
       score: Math.max(0, Math.min(100, score)),
       analysis,
       suggestions,
-      keywords: this.extractKeywordsFromAnalysis(response, dimension.keywords),
+      keywords: keywordsMatch ? 
+        keywordsMatch[1].trim().split(/[\s，,、]+/).filter(k => k.length > 0) :
+        this.extractKeywordsFromAnalysis(response, dimension.keywords),
       aiGenerated: true
     };
   }
